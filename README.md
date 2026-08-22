@@ -1,53 +1,93 @@
-# Fabric Bicep Extension
+# Microsoft Fabric Bicep Extension
 
-## Usage
+This experimental local-deploy extension manages Microsoft Fabric resources with Bicep. It uses the official [`Microsoft.Fabric.Api`](https://www.nuget.org/packages/Microsoft.Fabric.Api) .NET SDK.
 
-1. Download the [Samples folder](https://download-directory.github.io/?url=https%3A%2F%2Fgithub.com%2Fanthony-c-martin%2Fbicep-ext-github%2Ftree%2Fmain%2Fsamples), and unzip it.
-1. Open the unzipped Samples folder in VSCode, and select one of the `.bicepparam` files you wish to deploy.
-1. Launch the [Deploy Pane](https://github.com/Azure/bicep/blob/main/docs/experimental/deploy-ui.md) to run the deployment.
+## Supported resources
 
-> [!NOTE]
-> Extension binary packages are not signed on a Mac. If you see the following error, you will need to manually sign the extension package:
-> 
-> `Failed to launch provider: Failed to connect to provider /Users/ant/.bicep/br/bicepextdemo.azurecr.io/extensions$github/0.1.1$/extension.bin`
-> 
-> To work around it, run the following in a terminal window, using the path from the error message:
-> 
-> `codesign -s - '/Users/ant/.bicep/br/bicepextdemo.azurecr.io/extensions$github/0.1.1$/extension.bin'`
+The extension supports `Workspace` and the Fabric item types represented by the provider-aligned models in [`Models`](./src/Bicep.Extension.Fabric/Models), including `Lakehouse`, `Warehouse`, `Notebook`, `DataPipeline`, `SemanticModel`, and `Report`.
 
-## Build + Test Locally
+Fabric item resources share these properties:
 
-### Rebuild the extension
-These commands publish the extension to the local file system, and updates the sample bicepconfig to point to the local extension.
+- `workspaceId` and `displayName` are required.
+- `description` and `folderId` are optional.
+- `tags` accepts the IDs of tags to apply to the item. Tags applied outside of Bicep are left untouched when this is not set.
+- `definition.parts` accepts paths and base64-encoded payloads for definition-backed item types.
+- `id` and `type` are read-only outputs.
+
+Some item types carry extra creation configuration or read-only properties — for example `Lakehouse`,
+`Warehouse`, `WarehouseSnapshot`, `Eventhouse`, `KQLDatabase`, `SQLDatabase` and `DigitalTwinBuilderFlow`
+each expose a `configuration` object.
+
+`Dashboard`, `Datamart` and `MirroredWarehouse` are only exposed for listing and reading by the Fabric
+API, so they can be referenced with an `existing` resource but cannot be created, updated or deleted.
+
+Beyond items, the extension covers workspace configuration (role assignments, networking policies,
+Spark settings, OneLake data access, managed private endpoints and Git connections), along with
+tenant-level resources such as `Connection`, `Gateway`, `Domain`, `Tag`, `DeploymentPipeline` and
+`TenantSetting`.
+
+All Bicep properties use camelCase. The extension configuration requires a secure Microsoft Entra access token for `https://api.fabric.microsoft.com`.
+
+## Build and test
+
 ```sh
-./scripts/publish.sh ./bin/bicep-ext-github
-jq '.extensions.github="../bin/bicep-ext-github"' ./samples/bicepconfig.json > ./samples/bicepconfig.new.json
-mv ./samples/bicepconfig.new.json ./samples/bicepconfig.json
+dotnet build .
+dotnet test
+./scripts/publish.ps1 ./bicep-ext-fabric
 ```
 
-### Test the extension
-Run the deployment.
+The MSTest project runs with the Microsoft Testing Platform runner. Handler tests invoke
+the public `IResourceHandler` entry points through a JSON-based test harness, keeping
+serialization and camelCase behavior covered without contacting Fabric. Tests are grouped
+into focused classes by handler area; run one class with:
+
 ```sh
-~/.azure/bin/bicep local-deploy ./samples/basic/main.bicepparam
+dotnet test --filter "FullyQualifiedName~FabricRichItemHandlerTests"
 ```
 
-To enable verbose tracing, run the following beforehand.
-```sh
-export BICEP_TRACING_ENABLED=true
+See the [Bicep extension unit testing guide](https://github.com/Azure/bicep/blob/main/docs/experimental/local-deploy-dotnet-unittesting-guide.md)
+for the recommended handler testing approach.
+
+To use the local build, set the extension mapping in `samples/bicepconfig.json`:
+
+```json
+{
+  "experimentalFeaturesEnabled": {
+    "localDeploy": true
+  },
+  "extensions": {
+    "fabric": "../bicep-ext-fabric"
+  },
+  "implicitExtensions": []
+}
 ```
 
-## Publishing to a registry
-This repo is set up with GitHub Actions to publish a new version to an ACR on every push to the `main` branch.
+## Samples
 
-To pick up a new version after publishing, view the [Publish Extension output](https://github.com/anthony-c-martin/bicep-ext-github/actions/workflows/publish.yml), and update your bicepconfig.json to use the new spec:
+- [`basic`](./samples/basic) creates a workspace and lakehouse.
+- [`medallion-lakehouse`](./samples/medallion-lakehouse) creates bronze, silver, and gold lakehouses with an ingestion pipeline.
+- [`data-science`](./samples/data-science) creates a feature lakehouse, shared environment, experiment, and registered model.
+- [`real-time-analytics`](./samples/real-time-analytics) creates an eventhouse, KQL database, eventstream, KQL queryset, and dashboard.
+- [`governance`](./samples/governance) assigns a workspace to a domain, grants domain and workspace roles, applies a tag to an item, and creates a deployment pipeline.
+- [`workspace-security`](./samples/workspace-security) locks down workspace networking (Git, gateway, cloud connection, and public network policies), enables Spark workspace settings, grants OneLake data access, enables warehouse SQL auditing, and creates a Managed Private Endpoint.
+- [`workspace-git`](./samples/workspace-git) provisions a workspace identity and connects the workspace to an Azure DevOps repository.
 
-![publish extension output](./docs/publish_extension_output.png)
+Acquire a Fabric token and deploy any sample parameter file:
 
-### First time setup
-To configure the GitHub Actions automation for the first time:
+```sh
+export FABRIC_TOKEN=$(az account get-access-token --resource https://api.fabric.microsoft.com --query accessToken -o tsv)
+bicep local-deploy ./samples/medallion-lakehouse/main.bicepparam
+```
 
-Log in to Azure CLI. Customize and run `./scripts/initial_setup.sh`.
+This command creates or updates real Microsoft Fabric resources. Review the sample before deploying it.
 
-## Building other extensions
+Set `BICEP_TRACING_ENABLED=true` to enable verbose local-deploy tracing.
 
-This repo is also intended to demonstrate how to build + publish an end-to-end Bicep extension in C#. Feel free to copy, rename and modify it to prototype building an extension to extend other services.
+To configure this repository's GitHub branch protection and collaborators, login with the `gh` CLI and run:
+
+```powershell
+./scripts/setup.ps1
+```
+
+The script obtains a token from `GITHUB_TOKEN` or `gh auth token`, authenticates to GHCR
+when Docker is available, and deploys [`scripts/repo/main.bicepparam`](./scripts/repo/main.bicepparam).

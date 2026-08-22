@@ -13,17 +13,34 @@ public static class HandlerHarness
     // The Bicep host exchanges properties/config as camelCase JSON.
     private static readonly JsonSerializerOptions SerializerOptions = new(JsonSerializerDefaults.Web);
 
-    public static Task<LocalExtensibilityOperationResponse> CreateOrUpdateAsync(
+    public static Task<LocalExtensibilityOperationResponse> PreviewAsync(
         IResourceHandler handler,
         string type,
         object properties,
-        string token = "test-token",
+        string accessToken = "test-token",
         CancellationToken cancellationToken = default)
     {
         var spec = new ResourceSpecification
         {
             Type = type,
-            Config = JsonSerializer.Serialize(new { token }, SerializerOptions),
+            Config = JsonSerializer.Serialize(new { accessToken }, SerializerOptions),
+            Properties = JsonSerializer.Serialize(properties, SerializerOptions),
+        };
+
+        return handler.Preview(spec, cancellationToken);
+    }
+
+    public static Task<LocalExtensibilityOperationResponse> CreateOrUpdateAsync(
+        IResourceHandler handler,
+        string type,
+        object properties,
+        string accessToken = "test-token",
+        CancellationToken cancellationToken = default)
+    {
+        var spec = new ResourceSpecification
+        {
+            Type = type,
+            Config = JsonSerializer.Serialize(new { accessToken }, SerializerOptions),
             Properties = JsonSerializer.Serialize(properties, SerializerOptions),
         };
 
