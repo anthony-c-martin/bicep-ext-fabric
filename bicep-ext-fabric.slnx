@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="src/Bicep.Extension.Fabric.Tests/Bicep.Extension.Fabric.Tests.csproj" />
+  <Project Path="src/Bicep.Extension.Fabric/Bicep.Extension.Fabric.csproj" />
+</Solution>
