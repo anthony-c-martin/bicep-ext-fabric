@@ -17,9 +17,13 @@ extension github with {
   token: githubToken
 }
 
+@description('App id of the GitHub Actions app, used to scope required status checks to checks it reports.')
+var githubActionsIntegrationId = 15368
+
 resource repository 'Repository' = {
   owner: owner
   name: repoName
+  visibility: 'Public'
   hasIssues: true
   hasProjects: false
   hasWiki: false
@@ -30,7 +34,6 @@ resource repository 'Repository' = {
   allowAutoMerge: true
   allowUpdateBranch: true
   deleteBranchOnMerge: true
-  visibility: 'Public'
 }
 
 resource mainProtection 'RepositoryRuleset' = {
@@ -39,6 +42,13 @@ resource mainProtection 'RepositoryRuleset' = {
   name: 'protect-main'
   target: 'branch'
   enforcement: 'active'
+  bypassActors: [
+    {
+      actorType: 'RepositoryRole'
+      actorId: 5 // repository administrators
+      bypassMode: 'always'
+    }
+  ]
   conditions: {
     refName: {
       include: [
@@ -56,6 +66,22 @@ resource mainProtection 'RepositoryRuleset' = {
         requireLastPushApproval: false
         requiredApprovingReviewCount: 1
         requiredReviewThreadResolution: true
+      }
+    }
+    {
+      type: 'required_status_checks'
+      parameters: {
+        strictRequiredStatusChecksPolicy: false
+        requiredStatusChecks: [
+          {
+            context: 'Build Extension'
+            integrationId: githubActionsIntegrationId
+          }
+          {
+            context: 'Publish Locally'
+            integrationId: githubActionsIntegrationId
+          }
+        ]
       }
     }
     {
