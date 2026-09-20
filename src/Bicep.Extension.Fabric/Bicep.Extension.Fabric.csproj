@@ -20,6 +20,6 @@
 
   <ItemGroup>
     <PackageReference Include="Azure.Bicep.Local.Extension" Version="0.46.1" />
-    <PackageReference Include="Microsoft.Fabric.Api" Version="2.20.0" />
+    <PackageReference Include="Microsoft.Fabric.Api" Version="2.21.0" />
   </ItemGroup>
 </Project>
